@@ -1,4 +1,4 @@
-// eslint-disable-next-line no-restricted-imports
+
 import dayjs from "@calcom/dayjs";
 import { handleWebhookTrigger } from "@calcom/features/bookings/lib/handleWebhookTrigger";
 import type { EventPayloadType } from "@calcom/features/webhooks/lib/sendPayload";
@@ -160,6 +160,7 @@ const handleSeats = async (
         isConfirmedByDefault: !evt.requiresConfirmation,
         isRescheduleEvent: !!rescheduleUid,
         isNormalBookingOrFirstRecurringSlot: true,
+        traceContext: spanContext,
       });
     } catch (error) {
       tracingLogger.error("Error while scheduling workflow reminders", JSON.stringify({ error }));
