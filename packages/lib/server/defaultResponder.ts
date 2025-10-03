@@ -1,5 +1,3 @@
-import { wrapApiHandlerWithSentry } from "@sentry/nextjs";
-import { captureException } from "@sentry/nextjs";
 import type { NextApiRequest, NextApiResponse } from "next";
 
 import { type TraceContext } from "@calcom/lib/tracing";
@@ -38,9 +36,13 @@ export function defaultResponder<T>(
 
     try {
       performance.mark("Start");
-      const result = endpointRoute
-        ? await wrapApiHandlerWithSentry(f, endpointRoute)(tracedReq, res)
-        : await f(tracedReq, res);
+      let result: T | undefined;
+      if (process.env.NODE_ENV === "development" || !endpointRoute) {
+        result = await f(tracedReq, res);
+      } else {
+        const { wrapApiHandlerWithSentry } = await import("@sentry/nextjs");
+        result = await wrapApiHandlerWithSentry(f, endpointRoute)(tracedReq, res);
+      }
       ok = true;
       if (result && !res.writableEnded) {
         res.setHeader("X-Trace-Id", traceContext.traceId);
@@ -53,6 +55,7 @@ export function defaultResponder<T>(
       // we don't want to report Bad Request errors to Sentry / console
       if (!(error.statusCode >= 400 && error.statusCode < 500)) {
         console.error(error);
+        const { captureException } = await import("@sentry/nextjs");
         captureException(error);
       }
       res.setHeader("X-Trace-Id", traceContext.traceId);
