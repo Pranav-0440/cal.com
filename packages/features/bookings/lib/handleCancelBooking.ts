@@ -49,6 +49,7 @@ import { getBookingToDelete } from "./getBookingToDelete";
 import { handleInternalNote } from "./handleInternalNote";
 import cancelAttendeeSeat from "./handleSeats/cancel/cancelAttendeeSeat";
 import type { IBookingCancelService } from "./interfaces/IBookingCancelService";
+import type { Actor } from "./types/actor";
 
 const log = logger.getSubLogger({ prefix: ["handleCancelBooking"] });
 
@@ -65,6 +66,12 @@ export type BookingToDelete = Awaited<ReturnType<typeof getBookingToDelete>>;
 export type CancelBookingInput = {
   userId?: number;
   bookingData: z.infer<typeof bookingCancelInput>;
+  /**
+   * The actor performing the cancellation.
+   * Used for audit logging to track who cancelled the booking.
+   * Optional for backward compatibility - defaults to System actor if not provided.
+   */
+  actor?: Actor;
 } & PlatformParams;
 
 async function handler(input: CancelBookingInput) {
