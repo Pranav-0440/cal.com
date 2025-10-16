@@ -6,6 +6,8 @@ import type { z } from "zod";
 
 import type { bookingCancelInput } from "@calcom/prisma/zod-utils";
 
+import type { Actor } from "../types/actor";
+
 /**
  * The booking data required for cancellation
  */
@@ -21,6 +23,12 @@ export type CancelBookingMeta = {
   platformCancelUrl?: string;
   platformBookingUrl?: string;
   arePlatformEmailsEnabled?: boolean;
+  /**
+   * The actor performing the cancellation.
+   * Used for audit logging to track who cancelled the booking.
+   * Optional for backward compatibility - defaults to System actor if not provided.
+   */
+  actor?: Actor;
 };
 
 /**
