@@ -5,6 +5,7 @@ import type { NextRequest } from "next/server";
 
 import { getServerSession } from "@calcom/features/auth/lib/getServerSession";
 import handleCancelBooking from "@calcom/features/bookings/lib/handleCancelBooking";
+import { createUserActor, createSystemActor } from "@calcom/features/bookings/lib/types/actor";
 import { bookingCancelWithCsrfSchema } from "@calcom/prisma/zod-utils";
 
 import { buildLegacyRequest } from "@lib/buildLegacyCtx";
@@ -30,6 +31,12 @@ async function handler(req: NextRequest) {
   const result = await handleCancelBooking({
     bookingData,
     userId: session?.user?.id || -1,
+    actor: session?.user
+      ? createUserActor(session.user.id, {
+          email: session.user.email,
+          name: session.user.name || undefined,
+        })
+      : createSystemActor({ automationName: "public-cancel-page" }),
   });
 
   // const bookingCancelService = getBookingCancelService();
