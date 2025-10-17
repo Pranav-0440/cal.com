@@ -31,6 +31,7 @@ import type { AdditionalInformation, CalendarEvent } from "@calcom/types/Calenda
 import { getCalEventResponses } from "./getCalEventResponses";
 import { scheduleNoShowTriggers } from "./handleNewBooking/scheduleNoShowTriggers";
 import type { Actor } from "./types/actor";
+import { logBookingAudit } from "./utils/auditLog";
 
 const log = logger.getSubLogger({ prefix: ["[handleConfirmation] book:user"] });
 
@@ -255,6 +256,21 @@ export async function handleConfirmation(args: {
 
     const updatedBookingsResult = await Promise.all(updateBookingsPromise);
     updatedBookings = updatedBookings.concat(updatedBookingsResult);
+
+    for (const updatedBooking of updatedBookingsResult) {
+      await logBookingAudit({
+        bookingId: updatedBooking.id,
+        actor: _actor,
+        type: "RECORD_UPDATED",
+        action: "ACCEPTED",
+        data: {
+          status: BookingStatus.ACCEPTED,
+          startTime: updatedBooking.startTime.toISOString(),
+          endTime: updatedBooking.endTime.toISOString(),
+          videoCallUrl: meetingUrl,
+        },
+      });
+    }
   } else {
     // @NOTE: be careful with this as if any error occurs before this booking doesn't get confirmed
     // Should perform update on booking (confirm) -> then trigger the rest handlers
@@ -315,6 +331,19 @@ export async function handleConfirmation(args: {
       },
     });
     updatedBookings.push(updatedBooking);
+
+    await logBookingAudit({
+      bookingId: updatedBooking.id,
+      actor: _actor,
+      type: "RECORD_UPDATED",
+      action: "ACCEPTED",
+      data: {
+        status: BookingStatus.ACCEPTED,
+        startTime: updatedBooking.startTime.toISOString(),
+        endTime: updatedBooking.endTime.toISOString(),
+        videoCallUrl: meetingUrl,
+      },
+    });
   }
 
   const teamId = await getTeamIdFromEventType({

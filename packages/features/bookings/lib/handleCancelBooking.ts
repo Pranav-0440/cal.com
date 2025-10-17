@@ -50,6 +50,7 @@ import { handleInternalNote } from "./handleInternalNote";
 import cancelAttendeeSeat from "./handleSeats/cancel/cancelAttendeeSeat";
 import type { IBookingCancelService } from "./interfaces/IBookingCancelService";
 import type { Actor } from "./types/actor";
+import { logBookingAudit } from "./utils/auditLog";
 
 const log = logger.getSubLogger({ prefix: ["handleCancelBooking"] });
 
@@ -95,6 +96,7 @@ async function handler(input: CancelBookingInput) {
     platformClientId,
     platformRescheduleUrl,
     arePlatformEmailsEnabled,
+    actor,
   } = input;
 
   /**
@@ -430,6 +432,21 @@ async function handler(input: CancelBookingInput) {
       },
     });
     updatedBookings = updatedBookings.concat(allUpdatedBookings);
+
+    for (const booking of allUpdatedBookings) {
+      await logBookingAudit({
+        bookingId: booking.id,
+        actor,
+        type: "RECORD_UPDATED",
+        action: "CANCELLED",
+        data: {
+          cancellationReason,
+          cancelledBy,
+          startTime: booking.startTime.toISOString(),
+          endTime: booking.endTime.toISOString(),
+        },
+      });
+    }
   } else {
     if (bookingToDelete?.eventType?.seatsPerTimeSlot) {
       await prisma.attendee.deleteMany({
@@ -467,6 +484,19 @@ async function handler(input: CancelBookingInput) {
       },
     });
     updatedBookings.push(updatedBooking);
+
+    await logBookingAudit({
+      bookingId: updatedBooking.id,
+      actor,
+      type: "RECORD_UPDATED",
+      action: "CANCELLED",
+      data: {
+        cancellationReason,
+        cancelledBy,
+        startTime: updatedBooking.startTime.toISOString(),
+        endTime: updatedBooking.endTime.toISOString(),
+      },
+    });
 
     if (bookingToDelete.payment.some((payment) => payment.paymentOption === "ON_BOOKING")) {
       try {
