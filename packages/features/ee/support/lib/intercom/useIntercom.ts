@@ -18,11 +18,9 @@ const useIntercomHook = isInterComEnabled
   ? useIntercomLib
   : () => {
       return {
-         
         boot: (_props: IntercomBootProps) => {},
         show: noop,
         shutdown: noop,
-         
         update: (_props: Partial<IntercomProps>) => {},
       };
     };
