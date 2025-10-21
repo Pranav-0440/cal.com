@@ -1,10 +1,11 @@
+import type { BookingRepository } from "@calcom/features/bookings/repositories/BookingRepository";
+import { getSpamCheckService } from "@calcom/features/di/watchlist/containers/SpamCheckService.container";
+import { ProfileRepository } from "@calcom/features/profile/repositories/ProfileRepository";
+import type { UserRepository } from "@calcom/features/users/repositories/UserRepository";
 import { shouldIgnoreContactOwner } from "@calcom/lib/bookings/routing/utils";
 import { HttpError } from "@calcom/lib/http-error";
 import type logger from "@calcom/lib/logger";
-import type { BookingRepository } from "@calcom/features/bookings/repositories/BookingRepository";
-import type { UserRepository } from "@calcom/features/users/repositories/UserRepository";
 import { verifyCodeUnAuthenticated } from "@calcom/trpc/server/routers/viewer/auth/util";
-import { getSpamCheckService } from "@calcom/features/di/watchlist/containers/SpamCheckService.container";
 
 import type {
   BookingDataSchemaGetter,
@@ -116,8 +117,6 @@ export type ValidationOutput = {
     bookingUid: string | null;
   };
 };
-
-
 
 /**
  * TODO: Ideally we should send organizationId directly to handleNewBooking.
@@ -264,27 +263,19 @@ export class BookingValidationService {
       endTime,
     } = bookingFormData;
 
-    await validateBookingTimeIsNotOutOfBounds<typeof eventType>(
-      startTime,
-      bookerTimeZone,
-      eventType,
-      eventType.timeZone,
-      this.log
-    );
-
-    validateEventLength({
-      reqBodyStart: startTime,
-      reqBodyEnd: endTime,
-      eventTypeMultipleDuration: eventType.metadata?.multipleDuration,
-      eventTypeLength: eventType.length,
-      logger: this.log,
-    });
-
     await checkIfBookerEmailIsBlocked({
       loggedInUserId: loggedInUserId ?? undefined,
       bookerEmail,
+      verificationCode: rawBookingData.verificationCode,
       userRepository: this.userRepository,
     });
+
+    const spamCheckService = getSpamCheckService();
+    const eventOrganizationId = await getEventOrganizationId({
+      eventType,
+    });
+
+    spamCheckService.startCheck({ email: bookerEmail, organizationId: eventOrganizationId });
 
     if (!rawBookingData.rescheduleUid) {
       await checkActiveBookingsLimitForBooker({
@@ -307,7 +298,7 @@ export class BookingValidationService {
 
       try {
         await verifyCodeUnAuthenticated(bookerEmail, verificationCode);
-      } catch (error) {
+      } catch {
         throw new HttpError({
           statusCode: 400,
           message: "invalid_verification_code",
@@ -315,12 +306,21 @@ export class BookingValidationService {
       }
     }
 
-    const spamCheckService = getSpamCheckService();
-    const eventOrganizationId = await getEventOrganizationId({
+    await validateBookingTimeIsNotOutOfBounds<typeof eventType>(
+      startTime,
+      bookerTimeZone,
       eventType,
+      eventType.timeZone,
+      this.log
+    );
+
+    validateEventLength({
+      reqBodyStart: startTime,
+      reqBodyEnd: endTime,
+      eventTypeMultipleDuration: eventType.metadata?.multipleDuration,
+      eventTypeLength: eventType.length,
+      logger: this.log,
     });
-  
-    spamCheckService.startCheck({ email: bookerEmail, organizationId: eventOrganizationId });
 
     const _shouldIgnoreContactOwner = shouldIgnoreContactOwner({
       skipContactOwner: bookingData.skipContactOwner ?? null,
@@ -362,9 +362,9 @@ export class BookingValidationService {
                 bookingLocation: rawBookingMeta.platformBookingLocation ?? null,
               }
             : null,
-          skipAvailabilityCheck: rawBookingMeta.skipAvailabilityCheck ?? false,
-          skipEventLimitsCheck: rawBookingMeta.skipEventLimitsCheck ?? false,
-          skipCalendarSyncTaskCreation: rawBookingMeta.skipCalendarSyncTaskCreation ?? false,
+        skipAvailabilityCheck: rawBookingMeta.skipAvailabilityCheck ?? false,
+        skipEventLimitsCheck: rawBookingMeta.skipEventLimitsCheck ?? false,
+        skipCalendarSyncTaskCreation: rawBookingMeta.skipCalendarSyncTaskCreation ?? false,
       },
       config: {
         isDryRun: !!bookingData._isDryRun,

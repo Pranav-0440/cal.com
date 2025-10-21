@@ -1,15 +1,14 @@
+import type { UserRepository } from "@calcom/features/users/repositories/UserRepository";
 import { ErrorCode } from "@calcom/lib/errorCodes";
 import { ErrorWithCode } from "@calcom/lib/errors";
 import { extractBaseEmail } from "@calcom/lib/extract-base-email";
 import { verifyCodeUnAuthenticated } from "@calcom/trpc/server/routers/viewer/auth/util";
-import { HttpError } from "@calcom/lib/http-error";
-import type { UserRepository } from "@calcom/features/users/repositories/UserRepository";
 
 export const checkIfBookerEmailIsBlocked = async ({
   bookerEmail,
   loggedInUserId,
   verificationCode,
-  userRepository
+  userRepository,
 }: {
   bookerEmail: string;
   loggedInUserId?: number;
@@ -25,9 +24,6 @@ export const checkIfBookerEmailIsBlocked = async ({
   const blacklistedByEnv = blacklistedGuestEmails.find(
     (guestEmail: string) => guestEmail.toLowerCase() === baseEmail.toLowerCase()
   );
-  if (!blacklistedByEnv) {
-    return false;
-  }
 
   const user = await userRepository.findVerifiedUserByEmail({ email: baseEmail });
 

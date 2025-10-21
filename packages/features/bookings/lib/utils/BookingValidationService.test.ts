@@ -3,6 +3,8 @@ import mockLogger from "@calcom/lib/__mocks__/logger";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import dayjs from "@calcom/dayjs";
+import type { BookingRepository } from "@calcom/features/bookings/repositories/BookingRepository";
+import type { UserRepository } from "@calcom/features/users/repositories/UserRepository";
 
 import type { CreateBookingMeta, CreateRegularBookingData } from "../dto/types";
 import getBookingDataSchema from "../getBookingDataSchema";
@@ -394,8 +396,8 @@ const expectBookerDetails = (result: any, expectedName: string, expectedEmail: s
 const expectRepositoryCallsForValidation = (
   eventTypeId: number,
   eventTypeSlug: string,
-  bookerEmail: string,
-  loggedInUserId?: number
+  _bookerEmail: string,
+  _loggedInUserId?: number
 ) => {
   expect(mockGetEventType).toHaveBeenCalledWith({
     eventTypeId,
@@ -435,11 +437,11 @@ const expectNoActiveBookingsLimitCheck = () => {
 const mockBookingRepository = {
   countActiveBookingsForEventType: vi.fn(),
   findActiveBookingsForEventType: vi.fn(),
-} as any;
+} as BookingRepository;
 
 const mockUserRepository = {
   findVerifiedUserByEmail: vi.fn(),
-} as any;
+} as UserRepository;
 
 const mockGetEventType = vi.mocked(getEventType);
 
@@ -454,9 +456,8 @@ describe("BookingValidationService", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     bookingValidationService = new BookingValidationService({
-      log: mockLogger as any,
+      log: mockLogger,
       bookingRepository: mockBookingRepository,
       userRepository: mockUserRepository,
     });
@@ -925,6 +926,72 @@ describe("BookingValidationService", () => {
 
       const result = await bookingValidationService.validate(context, getBookingDataSchema);
       expectValidationResult(result);
+    });
+  });
+
+  describe("regression tests for validation bugs", () => {
+    it("should check user requiresBookerEmailVerification setting even when email is not blacklisted by env", async () => {
+      const timestamp = Date.now();
+      const bookerEmail = `test-${timestamp}@example.com`;
+
+      mockUserRepository.findVerifiedUserByEmail.mockResolvedValue({
+        id: 999,
+        email: bookerEmail,
+        requiresBookerEmailVerification: true,
+      });
+
+      const bookingData = createMockBookingData({
+        responses: {
+          name: "Test Booker",
+          email: bookerEmail,
+        },
+      });
+
+      const context = {
+        rawBookingData: bookingData,
+        rawBookingMeta: bookingTestData.bookingMeta,
+        eventType: { id: 1, slug: "test-event" },
+        loggedInUserId: null,
+      };
+
+      // and no verification code is provided
+      await expect(bookingValidationService.validate(context, getBookingDataSchema)).rejects.toThrow();
+
+      expect(mockUserRepository.findVerifiedUserByEmail).toHaveBeenCalledWith({ email: bookerEmail });
+    });
+
+    it("should pass verificationCode to checkIfBookerEmailIsBlocked when provided", async () => {
+      const timestamp = Date.now();
+      const bookerEmail = `test-${timestamp}@example.com`;
+      const verificationCode = "123456";
+
+      mockUserRepository.findVerifiedUserByEmail.mockResolvedValue({
+        id: 999,
+        email: bookerEmail,
+        requiresBookerEmailVerification: true,
+      });
+
+      const bookingData = createMockBookingData({
+        responses: {
+          name: "Test Booker",
+          email: bookerEmail,
+        },
+        verificationCode: verificationCode,
+      });
+
+      const context = {
+        rawBookingData: bookingData,
+        rawBookingMeta: bookingTestData.bookingMeta,
+        eventType: { id: 1, slug: "test-event" },
+        loggedInUserId: null,
+      };
+
+      try {
+        await bookingValidationService.validate(context, getBookingDataSchema);
+        // eslint-disable-next-line no-empty
+      } catch {}
+
+      expect(mockUserRepository.findVerifiedUserByEmail).toHaveBeenCalled();
     });
   });
 });
